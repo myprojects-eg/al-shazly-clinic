@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حالة جديدة - Al-Shazly Clinic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="nameplate">
+    <div class="title-row">
+      <span class="tooth-mark">🦷</span>
+      <h1>Al-Shazly Clinic</h1>
+    </div>
+  </div>
+
+  <div class="page-header">
+    <a class="back-link" href="index.html">→ الرئيسية</a>
+    <div class="page-title">إضافة حالة جديدة</div>
+    <span></span>
+  </div>
+
+  <div class="panel">
+    <input type="hidden" id="f-teeth-json" value="">
+
+    <div class="form-grid">
+      <div>
+        <label>اسم المريض</label>
+        <input id="f-name" type="text" placeholder="مثال: أحمد محمود">
+      </div>
+      <div>
+        <label>رقم الهاتف</label>
+        <input id="f-phone" type="text" placeholder="01xxxxxxxxx">
+      </div>
+      <div>
+        <label>العمر</label>
+        <input id="f-age" type="number" min="0" placeholder="مثال: 28">
+      </div>
+      <div>
+        <label>تاريخ الكشف / الزيارة</label>
+        <input id="f-date" type="date">
+      </div>
+      <div>
+        <label>نوع العلاج</label>
+        <input id="f-treatment-display" type="text" readonly placeholder="🦷 دوسي هنا لتحديد السن ونوع العلاج" style="cursor:pointer;" onclick="openToothChart('new-case')">
+      </div>
+      <div>
+        <label>التكلفة (جنيه)</label>
+        <input id="f-cost" type="number" min="0" placeholder="0">
+      </div>
+      <div>
+        <label>الزيارة القادمة (اختياري)</label>
+        <input id="f-next" type="date">
+      </div>
+      <div class="full">
+        <label>ملاحظات</label>
+        <textarea id="f-notes" placeholder="حالة الأسنان، الأشعة، أي تفاصيل مهمة..."></textarea>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-save-case">حفظ الحالة</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

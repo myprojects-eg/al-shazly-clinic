@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل الدخول - Al-Shazly Clinic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .login-wrap{
+    max-width:400px;
+    margin:60px auto;
+  }
+  .login-panel{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:34px 28px;
+    box-shadow:0 10px 28px rgba(28,43,38,0.10);
+  }
+  .login-error{
+    background:#F3DCD7;
+    color:var(--brick-dark);
+    border-radius:6px;
+    padding:10px 14px;
+    font-size:0.85rem;
+    margin-bottom:14px;
+    display:none;
+  }
+  .login-error.show{ display:block; }
+  .login-btn{ width:100%; margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="wrap login-wrap">
+
+  <div class="nameplate" style="margin-bottom:22px;">
+    <div class="title-row">
+      <span class="tooth-mark">🦷</span>
+      <h1>Al-Shazly Clinic</h1>
+    </div>
+  </div>
+
+  <div class="login-panel">
+    <h2 class="section-title">تسجيل الدخول</h2>
+
+    <div class="login-error" id="login-error"></div>
+
+    <div style="margin-bottom:14px;">
+      <label>البريد الإلكتروني</label>
+      <input id="login-email" type="email" autocomplete="username" placeholder="example@clinic.com">
+    </div>
+    <div style="margin-bottom:14px;">
+      <label>كلمة المرور</label>
+      <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+
+    <button class="btn btn-primary login-btn" id="btn-login">دخول</button>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script>
+  const emailInput = document.getElementById('login-email');
+  const passwordInput = document.getElementById('login-password');
+  const errorBox = document.getElementById('login-error');
+  const btn = document.getElementById('btn-login');
+
+  function showError(msg){
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+  }
+
+  function translateError(code){
+    switch(code){
+      case 'auth/invalid-email': return 'البريد الإلكتروني غير صحيح.';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential': return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+      case 'auth/too-many-requests': return 'محاولات كتير غلط، حاولي تاني بعد شوية.';
+      default: return 'حصل خطأ، حاولي تاني.';
+    }
+  }
+
+  async function doLogin(){
+    errorBox.classList.remove('show');
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if(!email || !password){
+      showError('اكتبي البريد الإلكتروني وكلمة المرور.');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'جاري الدخول...';
+    try{
+      await auth.signInWithEmailAndPassword(email, password);
+      window.location.href = 'index.html';
+    }catch(err){
+      showError(translateError(err.code));
+      btn.disabled = false;
+      btn.textContent = 'دخول';
+    }
+  }
+
+  btn.addEventListener('click', doLogin);
+  passwordInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') doLogin(); });
+
+  // لو المستخدم مسجل دخول بالفعل، وديه على الرئيسية على طول
+  auth.onAuthStateChanged((user)=>{
+    if(user) window.location.href = 'index.html';
+  });
+</script>
+</body>
+</html>
