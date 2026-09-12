@@ -172,11 +172,11 @@ function treatmentValueFrom(selectId, otherId){
    treatment to each one (used from new-case.html and from
    the "add visit" form on search.html)
    ========================================================= */
-const TREATMENT_OPTIONS = ['كشف','حشو عادي','حشو تجميلي','حشو أطفال','عصب','خلع','خلع أطفال','تنظيف جير','تقويم','تركيبات','زراعة','تبييض','أخرى'];
+const TREATMENT_OPTIONS = ['حشو عادي','حشو تجميلي','حشو أطفال','عصب','خلع','خلع أطفال','تنظيف جير','تقويم','تركيبات','زراعة','تبييض','أخرى'];
 
 // خيارات العلاج حسب السن — 12 سنة أو أقل يبقى أطفال بس، أكبر يبقى كبار بس
-const CHILD_TREATMENTS = ['كشف','حشو أطفال','خلع أطفال','تنظيف جير','أخرى'];
-const ADULT_TREATMENTS = ['كشف','حشو عادي','حشو تجميلي','عصب','خلع','تنظيف جير','تقويم','تركيبات','زراعة','تبييض','أخرى'];
+const CHILD_TREATMENTS = ['حشو أطفال','خلع أطفال','تنظيف جير','أخرى'];
+const ADULT_TREATMENTS = ['حشو عادي','حشو تجميلي','عصب','خلع','تنظيف جير','تقويم','تركيبات','زراعة','تبييض','أخرى'];
 
 function getAgeForTarget(target){
   if(target === 'new-case'){
@@ -420,25 +420,53 @@ function renderToothSelectedList(){
   }).join('');
 }
 
+/* ===== دمج "كشف" (تيك بوكس مستقل) مع اختيارات رسم الأسنان ===== */
+function getTeethForTarget(target){
+  const fieldId = target === 'new-case' ? 'f-teeth-json' : `nv-teeth-json-${target.replace('visit-','')}`;
+  const el = document.getElementById(fieldId);
+  if(!el || !el.value) return [];
+  try{ return JSON.parse(el.value); }catch(e){ return []; }
+}
+
+function isCheckupChecked(target){
+  const id = target === 'new-case' ? 'f-checkup' : `nv-checkup-${target.replace('visit-','')}`;
+  const el = document.getElementById(id);
+  return el ? el.checked : false;
+}
+
+window.recomputeCostAndDisplay = function(target){
+  const teeth = getTeethForTarget(target);
+  const checkup = isCheckupChecked(target);
+
+  let total = teeth.reduce((s,t)=> s + (TREATMENT_PRICES[t.treatment]||0), 0);
+  if(checkup) total += (TREATMENT_PRICES['كشف'] || 0);
+
+  const costFieldId = target === 'new-case' ? 'f-cost' : `nv-cost-${target.replace('visit-','')}`;
+  const costField = document.getElementById(costFieldId);
+  if(costField && total > 0) costField.value = total;
+
+  const displayFieldId = target === 'new-case' ? 'f-treatment-display' : `nv-treatment-display-${target.replace('visit-','')}`;
+  const displayField = document.getElementById(displayFieldId);
+  if(displayField){
+    const teethSummary = teeth.map(t => `${t.label} — ${t.treatment}`).join('، ');
+    const parts = [];
+    if(checkup) parts.push('كشف');
+    if(teethSummary) parts.push(teethSummary);
+    displayField.value = parts.join(' + ');
+  }
+};
+
 window.closeToothChart = function(save){
   const overlay = document.getElementById('tooth-modal-overlay');
   if(save){
     const entries = Object.keys(toothSelections).map(id => ({
       tooth: id, label: toothSelections[id].label, treatment: toothSelections[id].treatment
     }));
-    const summary = entries.map(e => `${e.label} — ${e.treatment}`).join('، ');
     const jsonStr = JSON.stringify(entries);
-
-    if(toothChartTarget === 'new-case'){
-      document.getElementById('f-teeth-json').value = jsonStr;
-      document.getElementById('f-treatment-display').value = summary;
-    }else if(toothChartTarget && toothChartTarget.startsWith('visit-')){
-      const pid = toothChartTarget.replace('visit-','');
-      const jsonField = document.getElementById('nv-teeth-json-'+pid);
-      const displayField = document.getElementById('nv-treatment-display-'+pid);
-      if(jsonField) jsonField.value = jsonStr;
-      if(displayField) displayField.value = summary;
-    }
+    const jsonFieldId = toothChartTarget === 'new-case' ? 'f-teeth-json' : `nv-teeth-json-${(toothChartTarget||'').replace('visit-','')}`;
+    const jsonField = document.getElementById(jsonFieldId);
+    if(jsonField) jsonField.value = jsonStr;
+    recomputeCostAndDisplay(toothChartTarget);
   }
   if(overlay) overlay.remove();
   toothChartTarget = null;
@@ -461,9 +489,7 @@ function initNewCasePage(){
     if(teethJsonField && teethJsonField.value){
       try{ teeth = JSON.parse(teethJsonField.value); }catch(e){ teeth = []; }
     }
-    const treatmentText = teeth.length
-      ? teeth.map(t => `${t.label} (${t.treatment})`).join('، ')
-      : document.getElementById('f-treatment-display').value.trim();
+    const treatmentText = document.getElementById('f-treatment-display').value.trim();
 
     const newPatient = {
       id: uid(),
@@ -487,6 +513,8 @@ function initNewCasePage(){
       const el = document.getElementById(id);
       if(el) el.value = '';
     });
+    const checkupBox = document.getElementById('f-checkup');
+    if(checkupBox) checkupBox.checked = false;
 
     showToast('تم حفظ الحالة');
   });
@@ -601,8 +629,12 @@ function renderPatientList(filter=''){
                 <label>تاريخ الزيارة</label>
                 <input type="date" id="nv-date-${p.id}">
               </div>
+              <div class="full" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                <input type="checkbox" id="nv-checkup-${p.id}" style="width:18px; height:18px;" onchange="recomputeCostAndDisplay('visit-${p.id}')">
+                <label for="nv-checkup-${p.id}" style="margin:0; cursor:pointer;">دي زيارة كشف</label>
+              </div>
               <div>
-                <label>نوع العلاج</label>
+                <label>نوع العلاج (اختياري)</label>
                 <input type="text" id="nv-treatment-display-${p.id}" readonly placeholder="🦷 دوسي هنا لتحديد السن ونوع العلاج" style="cursor:pointer;" onclick="openToothChart('visit-${p.id}')">
               </div>
               <div>
@@ -645,9 +677,7 @@ window.addVisit = async function(id){
   if(teethJsonField && teethJsonField.value){
     try{ teeth = JSON.parse(teethJsonField.value); }catch(e){ teeth = []; }
   }
-  const treatmentText = teeth.length
-    ? teeth.map(t => `${t.label} (${t.treatment})`).join('، ')
-    : document.getElementById('nv-treatment-display-'+id).value.trim();
+  const treatmentText = document.getElementById('nv-treatment-display-'+id).value.trim();
 
   const newVisit = {
     id: uid(),

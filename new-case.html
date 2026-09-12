@@ -47,8 +47,12 @@
         <label>تاريخ الكشف / الزيارة</label>
         <input id="f-date" type="date">
       </div>
+      <div class="full" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+        <input type="checkbox" id="f-checkup" style="width:18px; height:18px;" onchange="recomputeCostAndDisplay('new-case')">
+        <label for="f-checkup" style="margin:0; cursor:pointer;">دي زيارة كشف</label>
+      </div>
       <div>
-        <label>نوع العلاج</label>
+        <label>نوع العلاج (اختياري)</label>
         <input id="f-treatment-display" type="text" readonly placeholder="🦷 دوسي هنا لتحديد السن ونوع العلاج" style="cursor:pointer;" onclick="openToothChart('new-case')">
       </div>
       <div>
