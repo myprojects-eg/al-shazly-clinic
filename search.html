@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>بحث عن حالة - Al-Shazly Clinic</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://www.gstatic.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -28,8 +31,25 @@
     <div class="search-row">
       <input id="f-search" type="text" placeholder="ابحث بالاسم أو رقم الهاتف...">
     </div>
+
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div>
+        <label>فلتر بالتاريخ - من</label>
+        <input id="f-date-from" type="date">
+      </div>
+      <div>
+        <label>فلتر بالتاريخ - لحد</label>
+        <input id="f-date-to" type="date">
+      </div>
+      <div class="full" style="display:flex; justify-content:flex-end;">
+        <button class="btn btn-ghost btn-sm" id="btn-clear-date-filter">مسح فلتر التاريخ</button>
+      </div>
+    </div>
+
     <div id="case-count" style="color:var(--ink-soft); font-size:0.82rem; margin-bottom:10px;"></div>
-    <div class="case-list" id="case-list"></div>
+    <div class="case-list" id="case-list">
+      <div class="empty-state">جاري التحميل...</div>
+    </div>
   </div>
 
 </div>

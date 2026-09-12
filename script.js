@@ -174,6 +174,44 @@ function treatmentValueFrom(selectId, otherId){
    ========================================================= */
 const TREATMENT_OPTIONS = ['كشف','حشو عادي','حشو تجميلي','حشو أطفال','عصب','خلع','خلع أطفال','تنظيف جير','تقويم','تركيبات','زراعة','تبييض','أخرى'];
 
+// خيارات العلاج حسب السن — 12 سنة أو أقل يبقى أطفال بس، أكبر يبقى كبار بس
+const CHILD_TREATMENTS = ['كشف','حشو أطفال','خلع أطفال','تنظيف جير','أخرى'];
+const ADULT_TREATMENTS = ['كشف','حشو عادي','حشو تجميلي','عصب','خلع','تنظيف جير','تقويم','تركيبات','زراعة','تبييض','أخرى'];
+
+function getAgeForTarget(target){
+  if(target === 'new-case'){
+    const el = document.getElementById('f-age');
+    return el ? el.value.trim() : '';
+  }
+  if(target && target.startsWith('visit-')){
+    const pid = target.replace('visit-','');
+    const patient = patients.find(p => p.id === pid);
+    return patient ? (patient.age || '') : '';
+  }
+  return '';
+}
+
+function treatmentOptionsForAge(age){
+  if(age === '' || age === null || age === undefined) return TREATMENT_OPTIONS;
+  return Number(age) <= 12 ? CHILD_TREATMENTS : ADULT_TREATMENTS;
+}
+
+// أسعار مبدئية لكل نوع علاج — بتتحط تلقائي في خانة التكلفة، وتقدري تعدّليها يدوي براحتك
+const TREATMENT_PRICES = {
+  'كشف': 400,
+  'حشو عادي': 2000,
+  'حشو تجميلي': 2500,
+  'حشو أطفال': 1200,
+  'عصب': 3000,
+  'خلع': 200,
+  'خلع أطفال': 150,
+  'تنظيف جير': 250,
+  'تقويم': 3000,
+  'تركيبات': 1500,
+  'زراعة': 5000,
+  'تبييض': 800
+};
+
 let toothChartTarget = null;   // 'new-case' or 'visit-<patientId>'
 let toothSelections = {};      // { toothId: { label, treatment } }
 let activeToothId = null;      // tooth currently being assigned a treatment
@@ -251,6 +289,9 @@ function openToothChart(target){
     }catch(e){}
   }
 
+  const ageForTarget = getAgeForTarget(target);
+  const treatmentOptionsList = treatmentOptionsForAge(ageForTarget);
+
   const overlay = document.createElement('div');
   overlay.className = 'tooth-modal-overlay';
   overlay.id = 'tooth-modal-overlay';
@@ -267,7 +308,7 @@ function openToothChart(target){
           <div class="full">
             <select id="tooth-picker-treatment" onchange="toggleToothPickerOther()">
               <option value="">اختر نوع العلاج</option>
-              ${TREATMENT_OPTIONS.map(t => `<option value="${t}">${t === 'أخرى' ? 'أخرى (اكتب بنفسك)' : t}</option>`).join('')}
+              ${treatmentOptionsList.map(t => `<option value="${t}">${t === 'أخرى' ? 'أخرى (اكتب بنفسك)' : t}</option>`).join('')}
             </select>
           </div>
           <div class="full" id="tooth-picker-other-wrap" style="display:none;">
@@ -334,13 +375,31 @@ window.confirmToothTreatment = function(){
   setToothVisual(activeToothId, true);
   document.getElementById('tooth-picker').style.display = 'none';
   renderToothSelectedList();
+  updateSuggestedCost();
 };
 
 window.removeToothSelection = function(toothId){
   delete toothSelections[toothId];
   setToothVisual(toothId, false);
   renderToothSelectedList();
+  updateSuggestedCost();
 };
+
+function updateSuggestedCost(){
+  const total = Object.values(toothSelections).reduce(
+    (sum, item) => sum + (TREATMENT_PRICES[item.treatment] || 0), 0
+  );
+  if(total <= 0) return; // مفيش سعر مبدئي لأي من العلاجات المختارة (مثلاً "أخرى")، سيبي الخانة زي ما هي
+
+  let costField;
+  if(toothChartTarget === 'new-case'){
+    costField = document.getElementById('f-cost');
+  }else if(toothChartTarget && toothChartTarget.startsWith('visit-')){
+    const pid = toothChartTarget.replace('visit-','');
+    costField = document.getElementById('nv-cost-'+pid);
+  }
+  if(costField) costField.value = total;
+}
 
 function renderToothSelectedList(){
   const list = document.getElementById('tooth-selected-list');
@@ -410,6 +469,7 @@ function initNewCasePage(){
       id: uid(),
       name,
       phone: document.getElementById('f-phone').value.trim(),
+      age: document.getElementById('f-age').value.trim(),
       visits: [{
         id: uid(),
         date: document.getElementById('f-date').value,
@@ -423,7 +483,7 @@ function initNewCasePage(){
     patients.push(newPatient);
     await savePatients();
 
-    ['f-name','f-phone','f-date','f-treatment-display','f-cost','f-next','f-notes','f-teeth-json'].forEach(id=>{
+    ['f-name','f-phone','f-age','f-date','f-treatment-display','f-cost','f-next','f-notes','f-teeth-json'].forEach(id=>{
       const el = document.getElementById(id);
       if(el) el.value = '';
     });
@@ -440,7 +500,20 @@ function initSearchPage(){
   if(!list) return;
 
   const searchInput = document.getElementById('f-search');
-  searchInput.addEventListener('input', ()=> renderPatientList(searchInput.value));
+  const dateFrom = document.getElementById('f-date-from');
+  const dateTo = document.getElementById('f-date-to');
+  const clearBtn = document.getElementById('btn-clear-date-filter');
+
+  function refresh(){ renderPatientList(searchInput.value); }
+
+  searchInput.addEventListener('input', refresh);
+  if(dateFrom) dateFrom.addEventListener('change', refresh);
+  if(dateTo) dateTo.addEventListener('change', refresh);
+  if(clearBtn) clearBtn.addEventListener('click', ()=>{
+    if(dateFrom) dateFrom.value = '';
+    if(dateTo) dateTo.value = '';
+    refresh();
+  });
 
   renderPatientList('');
 }
@@ -448,11 +521,23 @@ function initSearchPage(){
 function renderPatientList(filter=''){
   const list = document.getElementById('case-list');
   const q = filter.trim().toLowerCase();
+  const dateFromEl = document.getElementById('f-date-from');
+  const dateToEl = document.getElementById('f-date-to');
+  const dateFrom = dateFromEl ? dateFromEl.value : '';
+  const dateTo = dateToEl ? dateToEl.value : '';
+
   let filtered = patients;
   if(q){
-    filtered = patients.filter(p =>
+    filtered = filtered.filter(p =>
       (p.name||'').toLowerCase().includes(q) ||
       (p.phone||'').toLowerCase().includes(q)
+    );
+  }
+  if(dateFrom || dateTo){
+    filtered = filtered.filter(p =>
+      (p.visits||[]).some(v =>
+        v.date && (!dateFrom || v.date >= dateFrom) && (!dateTo || v.date <= dateTo)
+      )
     );
   }
   filtered = [...filtered].sort((a,b)=>{
@@ -464,7 +549,8 @@ function renderPatientList(filter=''){
     filtered.length ? `عدد الحالات: ${filtered.length}` : '';
 
   if(filtered.length === 0){
-    list.innerHTML = `<div class="empty-state">${patients.length===0 ? 'لا توجد حالات مسجلة بعد.' : 'لا توجد نتائج مطابقة للبحث.'}</div>`;
+    const hasFilter = q || dateFrom || dateTo;
+    list.innerHTML = `<div class="empty-state">${patients.length===0 ? 'لا توجد حالات مسجلة بعد.' : (hasFilter ? 'لا توجد نتائج مطابقة للبحث.' : 'لا توجد حالات.')}</div>`;
     return;
   }
 
@@ -479,6 +565,7 @@ function renderPatientList(filter=''){
             <div class="case-name">${escapeHtml(p.name)}</div>
             <div class="case-meta">
               ${p.phone ? '📞 ' + escapeHtml(p.phone) : ''}
+              ${p.age ? ' • العمر: ' + escapeHtml(p.age) : ''}
               <br><span class="case-count-tag">${p.visits.length} زيارة</span>
               ${last && last.date ? ' • آخر زيارة: ' + formatDate(last.date) : ''}
             </div>
