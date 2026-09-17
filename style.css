@@ -480,6 +480,7 @@ table.rev-table td{ padding:9px 6px; border-bottom:1px solid var(--line); }
 }
 .tooth-group:hover .tooth-rect{ stroke:var(--sage); stroke-width:1.4px; }
 .tooth-rect.selected{ fill:url(#toothGradSelected); stroke:var(--brick-dark); }
+.tooth-rect.bulk-picked{ stroke:#2b6cb0; stroke-width:3px; }
 .tooth-gumline{
   fill:none;
   stroke:#d8d2c4;
@@ -509,6 +510,23 @@ table.rev-table td{ padding:9px 6px; border-bottom:1px solid var(--line); }
   font-size:12px;
   fill:var(--sage);
 }
+.bulk-mode-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:0.85rem;
+  color:var(--ink-soft);
+  margin-bottom:12px;
+  cursor:pointer;
+}
+.bulk-mode-row input{ width:16px; height:16px; }
+.bulk-apply-panel{
+  background:#EAF1F8;
+  border:1px solid #BFD6EC;
+  border-radius:8px;
+  padding:14px;
+  margin-bottom:14px;
+}
 .tooth-picker{
   background:var(--sage-light);
   border-radius:8px;
@@ -521,6 +539,18 @@ table.rev-table td{ padding:9px 6px; border-bottom:1px solid var(--line); }
   font-size:0.9rem;
   margin-bottom:10px;
   color:var(--ink);
+}
+.tooth-items-list{ margin-bottom:10px; }
+.tooth-item-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:6px 10px;
+  margin-bottom:6px;
+  font-size:0.82rem;
 }
 .tooth-selected-list{ margin-bottom:16px; }
 .tooth-selected-item{

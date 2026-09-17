@@ -213,11 +213,15 @@ const TREATMENT_PRICES = {
 };
 
 let toothChartTarget = null;   // 'new-case' or 'visit-<patientId>'
-let toothSelections = {};      // { toothId: { label, treatment } }
+let toothSelections = {};      // { toothId: { label, items: [{treatment, price}] } }
+let toothLabelMap = {};        // { toothId: label } — filled while drawing the jaw
 let activeToothId = null;      // tooth currently being assigned a treatment
 let activeToothLabel = '';
+let bulkModeOn = false;
+let bulkSelectedTeeth = new Set();
 
 function jawToothSvg(id, label, x, y){
+  toothLabelMap[id] = label;
   const num = label.split(' ').pop();
   const tx = x - 13, ty = y - 17;
   const toothPath = 'M13,1 C19,1 23,3.5 23.5,9 C24,14 22.5,17.5 20,19.5 C19.6,19.8 19.5,20.2 19.5,20.6 L19.3,25.5 C19.1,30 17.3,33 15.2,33 C13.6,33 13,31 13,28.5 C13,31 12.4,33 10.8,33 C8.7,33 6.9,30 6.7,25.5 L6.5,20.6 C6.5,20.2 6.4,19.8 6,19.5 C3.5,17.5 2,14 2.5,9 C3,3.5 7,1 13,1 Z';
@@ -231,11 +235,15 @@ function jawToothSvg(id, label, x, y){
     </g>`;
 }
 
-function buildJawSVG(){
+function buildJawSVG(isChild){
+  // أسنان اللبن (الأطفال) 5 بس في كل ربع فك، وبتترمز بحروف a-e مش أرقام
+  const quadrantCount = isChild ? 5 : 8;
+  const letters = ['a','b','c','d','e'];
   const W = 480, H = 340, cx = 240;
   const cyU = 150, ryU = 100, rxU = 200;
   const cyL = 175, ryL = 100, rxL = 200;
-  const startDeg = 14, endDeg = 166, steps = 16;
+  const startDeg = 14, endDeg = 166;
+  const steps = quadrantCount * 2;
   let upper = '', lower = '';
 
   for(let i=0; i<steps; i++){
@@ -244,11 +252,12 @@ function buildJawSVG(){
     const x = cx + rxU*Math.cos(rad);
     const yU = cyU - ryU*Math.sin(rad);
     const yL = cyL + ryL*Math.sin(rad);
-    const side = i < 8 ? 'يمين' : 'شمال';
-    const num = i < 8 ? (8-i) : (i-7);
-    const sideCode = i < 8 ? 'R' : 'L';
-    upper += jawToothSvg('U'+sideCode+num, 'فوق '+side+' '+num, x, yU);
-    lower += jawToothSvg('L'+sideCode+num, 'تحت '+side+' '+num, x, yL);
+    const side = i < quadrantCount ? 'يمين' : 'شمال';
+    const posIndex = i < quadrantCount ? (quadrantCount - i) : (i - quadrantCount + 1); // 1..quadrantCount
+    const posLabel = isChild ? letters[posIndex-1] : posIndex;
+    const sideCode = i < quadrantCount ? 'R' : 'L';
+    upper += jawToothSvg('U'+sideCode+posLabel, 'فوق '+side+' '+posLabel, x, yU);
+    lower += jawToothSvg('L'+sideCode+posLabel, 'تحت '+side+' '+posLabel, x, yL);
   }
 
   return `<svg viewBox="0 0 ${W} ${H}" class="jaw-svg" xmlns="http://www.w3.org/2000/svg">
@@ -278,19 +287,27 @@ function buildJawSVG(){
 function openToothChart(target){
   toothChartTarget = target;
   activeToothId = null;
+  bulkModeOn = false;
+  bulkSelectedTeeth = new Set();
+  toothLabelMap = {};
 
-  // preload existing selections if this target already has some
+  // preload existing selections if this target already has some (يدعم البيانات القديمة والجديدة)
   toothSelections = {};
   const jsonField = document.getElementById(target === 'new-case' ? 'f-teeth-json' : `nv-teeth-json-${target.replace('visit-','')}`);
   if(jsonField && jsonField.value){
     try{
       const arr = JSON.parse(jsonField.value);
-      arr.forEach(item => { toothSelections[item.tooth] = { label: item.label, treatment: item.treatment }; });
+      arr.forEach(item => {
+        const items = item.items || (item.treatment ? [{ treatment: item.treatment, price: TREATMENT_PRICES[item.treatment] || 0 }] : []);
+        toothSelections[item.tooth] = { label: item.label, items };
+      });
     }catch(e){}
   }
 
   const ageForTarget = getAgeForTarget(target);
+  const isChild = ageForTarget !== '' && ageForTarget !== null && Number(ageForTarget) <= 12;
   const treatmentOptionsList = treatmentOptionsForAge(ageForTarget);
+  const treatmentOptionsHtml = treatmentOptionsList.map(t => `<option value="${t}">${t === 'أخرى' ? 'أخرى (اكتب بنفسك)' : t}</option>`).join('');
 
   const overlay = document.createElement('div');
   overlay.className = 'tooth-modal-overlay';
@@ -301,22 +318,57 @@ function openToothChart(target){
         <h2 class="section-title" style="margin:0;">حددي السن ونوع العلاج</h2>
         <button class="btn-danger-text" onclick="closeToothChart(false)">إغلاق</button>
       </div>
-      <div class="jaw-chart">${buildJawSVG()}</div>
-      <div class="tooth-picker" id="tooth-picker" style="display:none;">
-        <div class="tooth-picker-label" id="tooth-picker-label"></div>
+
+      <label class="bulk-mode-row">
+        <input type="checkbox" id="bulk-mode-toggle" onchange="toggleBulkMode()">
+        وضع التحديد الجماعي (اختاري كذا سنة وطبّقي عليهم نفس العلاج مرة واحدة)
+      </label>
+
+      <div class="jaw-chart">${buildJawSVG(isChild)}</div>
+
+      <div class="bulk-apply-panel" id="bulk-apply-panel" style="display:none;">
+        <div id="bulk-count-label" class="tooth-picker-label">عدد الأسنان المحددة: 0</div>
+        <button class="btn btn-ghost btn-sm" onclick="selectAllTeeth()" style="margin-bottom:10px;">تحديد كل الأسنان</button>
         <div class="form-grid" style="margin-bottom:8px;">
-          <div class="full">
-            <select id="tooth-picker-treatment" onchange="toggleToothPickerOther()">
+          <div>
+            <select id="bulk-treatment" onchange="toggleBulkOther()">
               <option value="">اختر نوع العلاج</option>
-              ${treatmentOptionsList.map(t => `<option value="${t}">${t === 'أخرى' ? 'أخرى (اكتب بنفسك)' : t}</option>`).join('')}
+              ${treatmentOptionsHtml}
             </select>
           </div>
-          <div class="full" id="tooth-picker-other-wrap" style="display:none;">
-            <input type="text" id="tooth-picker-other" placeholder="اكتب نوع العلاج هنا">
+          <div id="bulk-other-wrap" style="display:none;">
+            <input type="text" id="bulk-other" placeholder="اكتب نوع العلاج هنا">
+          </div>
+          <div>
+            <input type="number" id="bulk-price" min="0" placeholder="السعر للسن الواحدة">
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="confirmToothTreatment()">تأكيد للسن ده</button>
+        <button class="btn btn-primary btn-sm" onclick="applyBulkTreatment()">تطبيق على الأسنان المحددة</button>
       </div>
+
+      <div class="tooth-picker" id="tooth-picker" style="display:none;">
+        <div class="tooth-picker-label" id="tooth-picker-label"></div>
+        <div class="tooth-items-list" id="tooth-items-list"></div>
+        <div class="form-grid" style="margin-bottom:8px;">
+          <div>
+            <select id="tooth-picker-treatment" onchange="toggleToothPickerOther()">
+              <option value="">اختر نوع العلاج</option>
+              ${treatmentOptionsHtml}
+            </select>
+          </div>
+          <div id="tooth-picker-other-wrap" style="display:none;">
+            <input type="text" id="tooth-picker-other" placeholder="اكتب نوع العلاج هنا">
+          </div>
+          <div>
+            <input type="number" id="tooth-picker-price" min="0" placeholder="السعر">
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="addItemToTooth()">إضافة العلاج للسن ده</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('tooth-picker').style.display='none'">تم</button>
+        </div>
+      </div>
+
       <div class="tooth-selected-list" id="tooth-selected-list"></div>
       <button class="btn btn-primary" id="btn-tooth-chart-save" onclick="closeToothChart(true)">حفظ وإغلاق</button>
     </div>
@@ -333,47 +385,166 @@ function setToothVisual(toothId, selected){
   if(text) text.classList.toggle('selected', selected);
 }
 
+function setToothBulkVisual(toothId, on){
+  const rect = document.getElementById('tb-' + toothId);
+  if(rect) rect.classList.toggle('bulk-picked', on);
+}
+
 function markSelectedBoxes(){
   Object.keys(toothSelections).forEach(id => setToothVisual(id, true));
 }
 
+/* ===== وضع التحديد الجماعي (أكتر من سنة بنفس العلاج مرة واحدة) ===== */
+window.toggleBulkMode = function(){
+  bulkModeOn = document.getElementById('bulk-mode-toggle').checked;
+  document.getElementById('bulk-apply-panel').style.display = bulkModeOn ? 'block' : 'none';
+  document.getElementById('tooth-picker').style.display = 'none';
+  bulkSelectedTeeth.forEach(id => setToothBulkVisual(id, false));
+  bulkSelectedTeeth = new Set();
+  updateBulkCountLabel();
+};
+
+function updateBulkCountLabel(){
+  const el = document.getElementById('bulk-count-label');
+  if(el) el.textContent = `عدد الأسنان المحددة: ${bulkSelectedTeeth.size}`;
+}
+
+window.selectAllTeeth = function(){
+  Object.keys(toothLabelMap).forEach(id => {
+    bulkSelectedTeeth.add(id);
+    setToothBulkVisual(id, true);
+  });
+  updateBulkCountLabel();
+};
+
+window.toggleBulkOther = function(){
+  const select = document.getElementById('bulk-treatment');
+  document.getElementById('bulk-other-wrap').style.display = select.value === 'أخرى' ? 'block' : 'none';
+  const priceField = document.getElementById('bulk-price');
+  if(select.value === 'أخرى'){
+    priceField.value = '';
+  }else if(select.value){
+    priceField.value = TREATMENT_PRICES[select.value] || '';
+  }
+};
+
+window.applyBulkTreatment = function(){
+  if(bulkSelectedTeeth.size === 0){ showToast('حددي سنة واحدة على الأقل'); return; }
+  const select = document.getElementById('bulk-treatment');
+  let treatment = select.value;
+  if(treatment === 'أخرى'){
+    treatment = document.getElementById('bulk-other').value.trim();
+  }
+  if(!treatment){ showToast('اختاري نوع العلاج'); return; }
+  const price = Number(document.getElementById('bulk-price').value || 0);
+
+  bulkSelectedTeeth.forEach(toothId => {
+    if(!toothSelections[toothId]){
+      toothSelections[toothId] = { label: toothLabelMap[toothId] || toothId, items: [] };
+    }
+    toothSelections[toothId].items.push({ treatment, price });
+    setToothVisual(toothId, true);
+    setToothBulkVisual(toothId, false);
+  });
+
+  bulkSelectedTeeth = new Set();
+  updateBulkCountLabel();
+  document.getElementById('bulk-treatment').value = '';
+  document.getElementById('bulk-price').value = '';
+  document.getElementById('bulk-other-wrap').style.display = 'none';
+  document.getElementById('bulk-other').value = '';
+  renderToothSelectedList();
+  updateSuggestedCost();
+  showToast('تم تطبيق العلاج على الأسنان المحددة');
+};
+
+/* ===== تحديد سن واحدة، وإضافة أكتر من علاج ليها ===== */
 window.pickTooth = function(toothId, label){
+  if(bulkModeOn){
+    if(bulkSelectedTeeth.has(toothId)){
+      bulkSelectedTeeth.delete(toothId);
+      setToothBulkVisual(toothId, false);
+    }else{
+      bulkSelectedTeeth.add(toothId);
+      setToothBulkVisual(toothId, true);
+    }
+    updateBulkCountLabel();
+    return;
+  }
+
   activeToothId = toothId;
   activeToothLabel = label;
   document.getElementById('tooth-picker').style.display = 'block';
   document.getElementById('tooth-picker-label').textContent = 'السن المحددة: ' + label;
-  const existing = toothSelections[toothId];
-  const select = document.getElementById('tooth-picker-treatment');
-  select.value = existing ? existing.treatment : '';
-  const otherWrap = document.getElementById('tooth-picker-other-wrap');
-  const otherInput = document.getElementById('tooth-picker-other');
-  if(existing && !TREATMENT_OPTIONS.includes(existing.treatment)){
-    select.value = 'أخرى';
-    otherWrap.style.display = 'block';
-    otherInput.value = existing.treatment;
-  }else{
-    otherWrap.style.display = 'none';
-    otherInput.value = '';
-  }
+  document.getElementById('tooth-picker-treatment').value = '';
+  document.getElementById('tooth-picker-other-wrap').style.display = 'none';
+  document.getElementById('tooth-picker-other').value = '';
+  document.getElementById('tooth-picker-price').value = '';
+  renderToothItemsList();
 };
 
 window.toggleToothPickerOther = function(){
   const select = document.getElementById('tooth-picker-treatment');
   document.getElementById('tooth-picker-other-wrap').style.display = select.value === 'أخرى' ? 'block' : 'none';
+  const priceField = document.getElementById('tooth-picker-price');
+  if(select.value === 'أخرى'){
+    priceField.value = '';
+  }else if(select.value){
+    priceField.value = TREATMENT_PRICES[select.value] || '';
+  }
 };
 
-window.confirmToothTreatment = function(){
+window.addItemToTooth = function(){
   if(!activeToothId) return;
   const select = document.getElementById('tooth-picker-treatment');
   let treatment = select.value;
   if(treatment === 'أخرى'){
     treatment = document.getElementById('tooth-picker-other').value.trim();
   }
-  if(!treatment){ showToast('اختاري نوع العلاج للسن الأول'); return; }
+  if(!treatment){ showToast('اختاري نوع العلاج'); return; }
+  const price = Number(document.getElementById('tooth-picker-price').value || 0);
 
-  toothSelections[activeToothId] = { label: activeToothLabel, treatment };
+  if(!toothSelections[activeToothId]){
+    toothSelections[activeToothId] = { label: activeToothLabel, items: [] };
+  }
+  toothSelections[activeToothId].items.push({ treatment, price });
   setToothVisual(activeToothId, true);
-  document.getElementById('tooth-picker').style.display = 'none';
+
+  document.getElementById('tooth-picker-treatment').value = '';
+  document.getElementById('tooth-picker-other-wrap').style.display = 'none';
+  document.getElementById('tooth-picker-other').value = '';
+  document.getElementById('tooth-picker-price').value = '';
+
+  renderToothItemsList();
+  renderToothSelectedList();
+  updateSuggestedCost();
+};
+
+function renderToothItemsList(){
+  const wrap = document.getElementById('tooth-items-list');
+  if(!wrap) return;
+  const data = toothSelections[activeToothId];
+  const items = data ? data.items : [];
+  if(!items || items.length === 0){
+    wrap.innerHTML = `<div style="font-size:0.78rem; color:var(--ink-soft); margin-bottom:8px;">لسه مفيش علاج مضاف للسن دي.</div>`;
+    return;
+  }
+  wrap.innerHTML = items.map((it, idx) => `
+    <div class="tooth-item-row">
+      <span>${escapeHtml(it.treatment)} — ${fmtMoney(it.price)}</span>
+      <button class="btn-danger-text" onclick="removeToothItem('${activeToothId}', ${idx})">حذف</button>
+    </div>
+  `).join('');
+}
+
+window.removeToothItem = function(toothId, index){
+  if(!toothSelections[toothId]) return;
+  toothSelections[toothId].items.splice(index, 1);
+  if(toothSelections[toothId].items.length === 0){
+    delete toothSelections[toothId];
+    setToothVisual(toothId, false);
+  }
+  renderToothItemsList();
   renderToothSelectedList();
   updateSuggestedCost();
 };
@@ -386,10 +557,9 @@ window.removeToothSelection = function(toothId){
 };
 
 function updateSuggestedCost(){
-  const total = Object.values(toothSelections).reduce(
-    (sum, item) => sum + (TREATMENT_PRICES[item.treatment] || 0), 0
-  );
-  if(total <= 0) return; // مفيش سعر مبدئي لأي من العلاجات المختارة (مثلاً "أخرى")، سيبي الخانة زي ما هي
+  let total = 0;
+  Object.values(toothSelections).forEach(t => (t.items||[]).forEach(it => { total += Number(it.price) || 0; }));
+  if(total <= 0) return; // مفيش سعر متحدد لسه، سيبي الخانة زي ما هي
 
   let costField;
   if(toothChartTarget === 'new-case'){
@@ -410,11 +580,12 @@ function renderToothSelectedList(){
     return;
   }
   list.innerHTML = entries.map(id => {
-    const item = toothSelections[id];
+    const data = toothSelections[id];
+    const itemsText = (data.items||[]).map(it => `${it.treatment} (${fmtMoney(it.price)})`).join('، ');
     return `
       <div class="tooth-selected-item">
-        <span>${escapeHtml(item.label)} — ${escapeHtml(item.treatment)}</span>
-        <button class="btn-danger-text" onclick="removeToothSelection('${id}')">حذف</button>
+        <span><strong>${escapeHtml(data.label)}</strong> — ${escapeHtml(itemsText)}</span>
+        <button class="btn-danger-text" onclick="removeToothSelection('${id}')">حذف السن</button>
       </div>
     `;
   }).join('');
@@ -435,10 +606,10 @@ function isCheckupChecked(target){
 }
 
 window.recomputeCostAndDisplay = function(target){
-  const teeth = getTeethForTarget(target);
+  const teeth = getTeethForTarget(target); // [{tooth,label,items:[{treatment,price}]}]
   const checkup = isCheckupChecked(target);
 
-  let total = teeth.reduce((s,t)=> s + (TREATMENT_PRICES[t.treatment]||0), 0);
+  let total = teeth.reduce((s,t)=> s + (t.items||[]).reduce((s2,it)=> s2 + (Number(it.price)||0), 0), 0);
   if(checkup) total += (TREATMENT_PRICES['كشف'] || 0);
 
   const costFieldId = target === 'new-case' ? 'f-cost' : `nv-cost-${target.replace('visit-','')}`;
@@ -448,7 +619,10 @@ window.recomputeCostAndDisplay = function(target){
   const displayFieldId = target === 'new-case' ? 'f-treatment-display' : `nv-treatment-display-${target.replace('visit-','')}`;
   const displayField = document.getElementById(displayFieldId);
   if(displayField){
-    const teethSummary = teeth.map(t => `${t.label} — ${t.treatment}`).join('، ');
+    const teethSummary = teeth.map(t => {
+      const itemsText = (t.items||[]).map(it => it.treatment).join('، ');
+      return `${t.label} (${itemsText})`;
+    }).join('، ');
     const parts = [];
     if(checkup) parts.push('كشف');
     if(teethSummary) parts.push(teethSummary);
@@ -460,7 +634,7 @@ window.closeToothChart = function(save){
   const overlay = document.getElementById('tooth-modal-overlay');
   if(save){
     const entries = Object.keys(toothSelections).map(id => ({
-      tooth: id, label: toothSelections[id].label, treatment: toothSelections[id].treatment
+      tooth: id, label: toothSelections[id].label, items: toothSelections[id].items
     }));
     const jsonStr = JSON.stringify(entries);
     const jsonFieldId = toothChartTarget === 'new-case' ? 'f-teeth-json' : `nv-teeth-json-${(toothChartTarget||'').replace('visit-','')}`;
@@ -471,6 +645,8 @@ window.closeToothChart = function(save){
   if(overlay) overlay.remove();
   toothChartTarget = null;
   activeToothId = null;
+  bulkModeOn = false;
+  bulkSelectedTeeth = new Set();
 };
 
 /* =========================================================
