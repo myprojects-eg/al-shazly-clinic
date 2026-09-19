@@ -76,14 +76,16 @@ function addLogoutButton(){
 
 function applyRoleUI(){
   addLogoutButton();
-  // اخفاء كارت الإيرادات من الصفحة الرئيسية لو مش أونر
-  const financeCard = document.getElementById('nav-card-finance');
-  if(financeCard && currentRole !== 'owner'){
-    financeCard.style.display = 'none';
-  }
-  // منع فتح صفحة الإيرادات مباشرة بالرابط لو مش أونر
-  if(document.getElementById('rev-month') && currentRole !== 'owner'){
-    window.location.href = 'index.html';
+
+  // لو مش أونر، على صفحة المصروفات/الإيرادات: نسيبها متاحة بس نخبي أجزاء الإيرادات بس
+  if(currentRole !== 'owner'){
+    document.querySelectorAll('.owner-only-finance').forEach(el => el.style.display = 'none');
+    const pageTitle = document.querySelector('.page-title');
+    if(pageTitle && document.getElementById('stat-expenses')){
+      pageTitle.textContent = 'المصروفات';
+    }
+    const navFinanceTitle = document.querySelector('#nav-card-finance .title');
+    if(navFinanceTitle) navFinanceTitle.textContent = 'المصروفات';
   }
 }
 
